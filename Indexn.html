@@ -1,0 +1,132 @@
+<script>
+  // === KONFIGURATION ===
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxdf5Tn2q9ys83-LrOhI9_H-CvUvC0mhfjSV-LUxqMkPUHjI-sk7ANmdMC14bXnYR2v/exec";
+
+  function toggleDay(headerElement) {
+    headerElement.parentElement.classList.toggle('open');
+  }
+
+  function openModal(imageSrc) {
+    const modal = document.getElementById('imageModal');
+    const modalImg = document.getElementById('modalImg');
+    modal.style.display = 'flex';
+    modalImg.src = imageSrc;
+  }
+
+  function closeModal() {
+    document.getElementById('imageModal').style.display = 'none';
+  }
+
+  // === GALERIE LADEN (JSONP) ===
+  function loadGallery() {
+    const callbackName = 'galleryCallback_' + Date.now();
+    let timeoutId = null;
+
+    window[callbackName] = function (data) {
+      if (timeoutId) clearTimeout(timeoutId);
+      renderGallery(data);
+      try {
+        delete window[callbackName];
+        const s = document.getElementById('jsonp_' + callbackName);
+        if (s) s.remove();
+      } catch (e) {}
+    };
+
+    const script = document.createElement('script');
+    script.id = 'jsonp_' + callbackName;
+    script.src = SCRIPT_URL + '?callback=' + callbackName + '&t=' + Date.now();
+    script.onerror = function () {
+      showGalleryError("Galerie konnte nicht geladen werden (Netzwerk).");
+    };
+    document.body.appendChild(script);
+
+    timeoutId = setTimeout(() => {
+      showGalleryError("Galerie-Antwort dauert zu lange.");
+    }, 15000);
+  }
+
+  function showGalleryError(msg) {
+    document.getElementById('photoGrid').innerHTML =
+      '<p style="color:#f87171; grid-column: 1 / -1;">' + msg + '</p>';
+  }
+
+  function renderGallery(data) {
+    const grid = document.getElementById('photoGrid');
+
+    const images = (data && data.images) ? data.images : [];
+
+    if (images.length === 0) {
+      grid.innerHTML = '<p style="color: var(--text-muted); grid-column: 1 / -1;">Noch keine Fotos vorhanden.</p>';
+      return;
+    }
+
+    grid.innerHTML = '';
+    images.forEach(function (img) {
+      const el = document.createElement('img');
+      el.src = img.thumb;
+      el.alt = img.name || "Foto";
+      el.loading = "lazy";
+      el.onclick = function () { openModal(img.url); };
+      grid.appendChild(el);
+    });
+  }
+
+  // === UPLOAD ===
+  function handleAutoUpload(event) {
+    const files = event.target.files;
+    const status = document.getElementById('uploadStatus');
+    if (!files || files.length === 0) return;
+
+    const total = files.length;
+    let done = 0;
+    let errors = 0;
+
+    status.innerText = total > 1 ? `⏳ Lade ${total} Fotos hoch…` : "⏳ Foto wird hochgeladen…";
+
+    Array.from(files).forEach(function (file, index) {
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const base64Data = e.target.result.split(',')[1];
+
+        const payload = {
+          filename: "bene40_" + Date.now() + "_" + index + ".jpg",
+          mimeType: file.type || "image/jpeg",
+          base64: base64Data
+        };
+
+        fetch(SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+          done++;
+          if (data.result === "success") {
+            status.innerText = `✅ ${done}/${total} hochgeladen…`;
+          } else {
+            errors++;
+            status.innerText = `❌ Fehler bei ${done}/${total}: ${data.error || "Serverfehler"}`;
+          }
+          if (done === total) {
+            status.innerText = errors === 0
+              ? `✅ Alle ${total} Fotos erfolgreich hochgeladen!`
+              : `⚠️ ${total - errors}/${total} erfolgreich.`;
+            loadGallery();
+          }
+        })
+        .catch(err => {
+          done++; errors++;
+          console.error(err);
+          status.innerText = "❌ Verbindungsfehler zum Server.";
+          if (done === total) loadGallery();
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+
+    event.target.value = '';
+  }
+
+  window.addEventListener('DOMContentLoaded', loadGallery);
+      </script>
