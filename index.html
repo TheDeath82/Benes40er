@@ -1,132 +1,462 @@
-<script>
-  // === KONFIGURATION ===
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwMvYedG4i_VxmeWLGdm-Ols2wloSDjZLPyG-VxmnMVmgrS9dnJeelaiBjGAzdOlfrT/exec";
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Benes 40. Geburtstag - Heidelberg Trip</title>
+  <meta name="description" content="Heidelberg-Trip zu Benes 40. Geburtstag vom 09.10. bis 11.10.2026 mit Programm und Foto-Upload.">
+  <meta property="og:title" content="Benes 40. Geburtstag – Heidelberg Trip">
+  <meta property="og:description" content="Programm, Treffpunkte und gemeinsamer Foto-Upload für unseren Heidelberg-Trip.">
+  <meta property="og:type" content="website">
 
-  function toggleDay(headerElement) {
-    headerElement.parentElement.classList.toggle('open');
-  }
+  <!-- PWA & Cross-Browser Metadata Config -->
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Benes 40th">
 
-  function openModal(imageSrc) {
-    const modal = document.getElementById('imageModal');
-    const modalImg = document.getElementById('modalImg');
-    modal.style.display = 'flex';
-    modalImg.src = imageSrc;
-  }
-
-  function closeModal() {
-    document.getElementById('imageModal').style.display = 'none';
-  }
-
-  // === GALERIE LADEN (JSONP) ===
-  function loadGallery() {
-    const callbackName = 'galleryCallback_' + Date.now();
-    let timeoutId = null;
-
-    window[callbackName] = function (data) {
-      if (timeoutId) clearTimeout(timeoutId);
-      renderGallery(data);
-      try {
-        delete window[callbackName];
-        const s = document.getElementById('jsonp_' + callbackName);
-        if (s) s.remove();
-      } catch (e) {}
-    };
-
-    const script = document.createElement('script');
-    script.id = 'jsonp_' + callbackName;
-    script.src = SCRIPT_URL + '?callback=' + callbackName + '&t=' + Date.now();
-    script.onerror = function () {
-      showGalleryError("Galerie konnte nicht geladen werden (Netzwerk).");
-    };
-    document.body.appendChild(script);
-
-    timeoutId = setTimeout(() => {
-      showGalleryError("Galerie-Antwort dauert zu lange.");
-    }, 15000);
-  }
-
-  function showGalleryError(msg) {
-    document.getElementById('photoGrid').innerHTML =
-      '<p style="color:#f87171; grid-column: 1 / -1;">' + msg + '</p>';
-  }
-
-  function renderGallery(data) {
-    const grid = document.getElementById('photoGrid');
-
-    const images = (data && data.images) ? data.images : [];
-
-    if (images.length === 0) {
-      grid.innerHTML = '<p style="color: var(--text-muted); grid-column: 1 / -1;">Noch keine Fotos vorhanden.</p>';
-      return;
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --db-red: #f01414;
+      --onedrive-blue: #0078d4;
+      --onedrive-hover: #005a9e;
+      --maps-green: #10b981;
     }
 
-    grid.innerHTML = '';
-    images.forEach(function (img) {
-      const el = document.createElement('img');
-      el.src = img.thumb;
-      el.alt = img.name || "Foto";
-      el.loading = "lazy";
-      el.onclick = function () { openModal(img.url); };
-      grid.appendChild(el);
-    });
-  }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
 
-  // === UPLOAD ===
-  function handleAutoUpload(event) {
-    const files = event.target.files;
-    const status = document.getElementById('uploadStatus');
-    if (!files || files.length === 0) return;
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      padding: 16px;
+      padding-top: max(16px, env(safe-area-inset-top));
+      padding-bottom: max(40px, env(safe-area-inset-bottom));
+      max-width: 800px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
 
-    const total = files.length;
-    let done = 0;
-    let errors = 0;
+    header { text-align: center; margin-bottom: 24px; padding: 20px 0; border-bottom: 1px solid var(--border); }
+    header h1 { font-size: 2rem; color: var(--accent); margin-bottom: 6px; }
+    header p { color: var(--text-muted); font-size: 0.95rem; }
 
-    status.innerText = total > 1 ? `⏳ Lade ${total} Fotos hoch…` : "⏳ Foto wird hochgeladen…";
+    /* Upload Area */
+    .upload-card {
+      background: var(--card-bg);
+      border: 2px dashed var(--accent);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      text-align: center;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+    .upload-card h3 { color: var(--accent); font-size: 1.1rem; margin-bottom: 6px; }
+    .upload-card p { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px; }
 
-    Array.from(files).forEach(function (file, index) {
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        const base64Data = e.target.result.split(',')[1];
+    .btn-group-center {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
 
-        const payload = {
-          filename: "bene40_" + Date.now() + "_" + index + ".jpg",
-          mimeType: file.type || "image/jpeg",
-          base64: base64Data
-        };
+    /* Galerie Sektion */
+    .gallery-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .gallery-card h2 { font-size: 1.3rem; color: var(--accent); margin-bottom: 6px; }
+    .gallery-card p { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px; }
 
-        fetch(SCRIPT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(payload)
-        })
-        .then(res => res.json())
-        .then(data => {
-          done++;
-          if (data.result === "success") {
-            status.innerText = `✅ ${done}/${total} hochgeladen…`;
-          } else {
-            errors++;
-            status.innerText = `❌ Fehler bei ${done}/${total}: ${data.error || "Serverfehler"}`;
-          }
-          if (done === total) {
-            status.innerText = errors === 0
-              ? `✅ Alle ${total} Fotos erfolgreich hochgeladen!`
-              : `⚠️ ${total - errors}/${total} erfolgreich.`;
-            loadGallery();
-          }
-        })
-        .catch(err => {
-          done++; errors++;
-          console.error(err);
-          status.innerText = "❌ Verbindungsfehler zum Server.";
-          if (done === total) loadGallery();
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .photo-grid img {
+      width: 100%;
+      height: 100px;
+      border-radius: 8px;
+      object-fit: cover;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: transform 0.2s ease, border-color 0.2s ease;
+      -webkit-user-drag: none;
+      background: #0b1220;
+    }
+    .photo-grid img:hover { transform: scale(1.04); border-color: var(--accent); }
+
+    /* Modal / Lightbox Vorschau */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 10000;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-color: rgba(0, 0, 0, 0.92);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .modal img { max-width: 95%; max-height: 85vh; border-radius: 8px; object-fit: contain; }
+    .modal-close {
+      position: absolute;
+      top: max(20px, env(safe-area-inset-top)); right: 25px;
+      color: #fff; font-size: 36px; font-weight: bold;
+      cursor: pointer; user-select: none;
+    }
+
+    /* Programmpunkte */
+    .day-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); }
+    .day-header { padding: 16px 20px; background: rgba(255,255,255,0.03); cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; }
+    .day-header h2 { font-size: 1.2rem; }
+    .day-header .toggle-icon { transition: transform 0.3s ease; }
+    .day-card.open .toggle-icon { transform: rotate(180deg); }
+
+    .events-list { display: none; padding: 16px; border-top: 1px solid var(--border); }
+    .day-card.open .events-list { display: block; }
+
+    .event-item { position: relative; padding-left: 20px; margin-bottom: 24px; border-left: 3px solid var(--accent); }
+    .event-item:last-child { margin-bottom: 0; }
+    .event-time { font-size: 0.85rem; color: var(--accent); font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+    .event-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 6px; }
+    .event-desc { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 10px; }
+
+    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; border-radius: 6px; font-size: 0.82rem; font-weight: 600; text-decoration: none; color: white; transition: background 0.2s, opacity 0.2s; border: none; cursor: pointer; -webkit-appearance: none; appearance: none; }
+    .btn:active { opacity: 0.8; }
+    .btn-db { background-color: var(--db-red); }
+    .btn-db:hover { background-color: #c30f0f; }
+    .btn-maps { background-color: var(--maps-green); }
+    .btn-maps:hover { background-color: #059669; }
+    .btn-onedrive { background-color: var(--onedrive-blue); color: #fff; }
+    .btn-onedrive:hover { background-color: var(--onedrive-hover); }
+    .btn-local { background-color: var(--accent); color: #0f172a; }
+    .btn-local:hover { background-color: var(--accent-hover); color: white; }
+    .btn-secondary { background-color: #334155; color: #f8fafc; }
+    .btn-secondary:hover { background-color: #475569; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>🎉 Benes 40. Geburtstag</h1>
+    <p>Heidelberg Trip | 09.10. - 11.10.2026</p>
+  </header>
+
+  <!-- UPLOAD FUNKTIONEN (KAMERA & GALERIE) -->
+  <div class="upload-card">
+    <h3>📸 Automatischer Foto-Upload</h3>
+    <p>Fotos werden nach dem Knipsen / Auswählen vollautomatisch in Google Drive abgelegt.</p>
+
+    <!-- Versteckte Inputs für Kamera & Galerie -->
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;" onchange="handleAutoUpload(event)">
+    <input type="file" id="galleryInput" accept="image/*" multiple style="display: none;" onchange="handleAutoUpload(event)">
+
+    <div class="btn-group-center">
+      <button onclick="document.getElementById('cameraInput').click()" class="btn btn-local" style="padding: 10px 16px; font-size: 0.9rem;">
+        📷 Kamera öffnen
+      </button>
+
+      <button onclick="document.getElementById('galleryInput').click()" class="btn btn-secondary" style="padding: 10px 16px; font-size: 0.9rem;">
+        🖼️ Aus Galerie wählen
+      </button>
+    </div>
+
+    <div id="uploadStatus" style="font-size: 0.85rem; color: var(--accent); margin-top: 12px; font-weight: bold; min-height: 20px;"></div>
+  </div>
+
+  <!-- Foto Galerie -->
+  <div class="gallery-card">
+    <h2>🖼️ Heidelberg Foto-Galerie</h2>
+    <p>Alle gesammelten Fotos erscheinen hier:</p>
+
+    <a href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener noreferrer" class="btn btn-onedrive" style="font-size: 0.9rem; padding: 9px 16px; margin-bottom: 12px;">
+      📦 Alle Fotos im Google Drive ansehen
+    </a>
+
+    <div id="photoGrid" class="photo-grid">
+      <p style="color: var(--text-muted); grid-column: 1 / -1;">Lade Galerie…</p>
+    </div>
+  </div>
+
+  <main id="schedule">
+
+    <!-- Freitag -->
+    <div class="day-card open">
+      <div class="day-header" onclick="toggleDay(this)">
+        <h2>Freitag, 09.10. – Ankommen & Kneipentour</h2>
+        <span class="toggle-icon">▼</span>
+      </div>
+      <div class="events-list">
+
+        <div class="event-item">
+          <div class="event-time">16:00 - 17:30 Uhr</div>
+          <div class="event-title">Ankunft & Willkommens-Drink</div>
+          <div class="event-desc">Check-in im B54 Hotel Kurpfalzstraße. Danach erster Anstoß am Neckar/Bismarckplatz.</div>
+          <div class="btn-group">
+            <a href="https://maps.google.com/?q=Hotel+B54+Heidelberg" target="_blank" rel="noopener noreferrer" class="btn btn-maps">📍 Hotel B54</a>
+            <button onclick="document.getElementById('cameraInput').click()" class="btn btn-local">📸 Kamera</button>
+            <button onclick="document.getElementById('galleryInput').click()" class="btn btn-secondary">🖼️ Galerie</button>
+          </div>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">18:00 - 20:00 Uhr</div>
+          <div class="event-title">Abendessen: Trattoria Toscana</div>
+          <div class="event-desc">Italienischer Auftakt mitten in der Altstadt.</div>
+          <div class="btn-group">
+            <a href="https://maps.google.com/?q=Trattoria+Toscana+Heidelberg" target="_blank" rel="noopener noreferrer" class="btn btn-maps">📍 Trattoria Toscana</a>
+          </div>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">20:00 - 23:30 Uhr</div>
+          <div class="event-title">Kneipentour Untere Straße</div>
+          <div class="event-desc">Kult-Kneipen: Destille, Sonderbar, Betreutes Trinken & Weinfest-Atmosphäre.</div>
+          <div class="btn-group">
+            <a href="https://maps.google.com/?q=Untere+Strasse+Heidelberg" target="_blank" rel="noopener noreferrer" class="btn btn-maps">🍺 Untere Straße</a>
+            <button onclick="document.getElementById('cameraInput').click()" class="btn btn-local">📸 Kamera</button>
+          </div>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">Ab 23:30 Uhr (Optional)</div>
+          <div class="event-title">Party-Abschluss in Altstadt-Clubs</div>
+          <div class="event-desc">Spontan weiterziehen in den Marseille Club oder CAVE 54.</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Samstag -->
+    <div class="day-card">
+      <div class="day-header" onclick="toggleDay(this)">
+        <h2>Samstag, 10.10. – Benes Geburtstags-Tour</h2>
+        <span class="toggle-icon">▼</span>
+      </div>
+      <div class="events-list">
+
+        <div class="event-item">
+          <div class="event-time">09:00 - 11:00 Uhr</div>
+          <div class="event-title">Frühstück im Schwarzer Wal</div>
+          <div class="event-desc">Gemeinsamer Start in den Geburtstag mit Kaffee, Omeletts & Anstoßen.</div>
+          <div class="btn-group">
+            <a href="https://maps.google.com/?q=Schwarzer+Walfisch+Heidelberg" target="_blank" rel="noopener noreferrer" class="btn btn-maps">📍 Schwarzer Wal</a>
+          </div>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">11:00 - 12:15 Uhr</div>
+          <div class="event-title">Hauptstraße, Marktplatz & Heiliggeistkirche</div>
+          <div class="event-desc">Trink-Stop #1 (ca. 11:30 Uhr) auf ein Bier/Wein am Marktplatz.</div>
+          <div class="btn-group">
+            <a href="https://maps.google.com/?q=Marktplatz+Heidelberg" target="_blank" rel="noopener noreferrer" class="btn btn-maps">🍷 Marktplatz</a>
+            <button onclick="document.getElementById('cameraInput').click()" class="btn btn-local">📸 Kamera</button>
+          </div>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">12:15 - 14:15 Uhr</div>
+          <div class="event-title">Bergbahn & Heidelberger Schloss</div>
+          <div class="event-desc">Bequem mit der Bergbahn hoch. Trink-Stop #2 (ca. 13:00 Uhr) mit Wein-Ausschank am Großen Fass.</div>
+          <div class="btn-group">
+            <a href="https://maps.google.com/?q=Schloss+Heidelberg" target="_blank" rel="noopener noreferrer" class="btn btn-maps">🏰 Schloss Heidelberg</a>
+          </div>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">14:15 - 15:45 Uhr</div>
+          <div class="event-title">Einkehr: Kulturbrauerei Heidelberg</div>
+          <div class="event-desc">Trink-Stop #3 & Deftige Snacks (Brezeln, Obatzter) und hausgebrautes Bier.</div>
+          <div class="btn-group">
+            <a href="https://maps.google.com/?q=Kulturbrauerei+Heidelberg" target="_blank" rel="noopener noreferrer" class="btn btn-maps">🍺 Kulturbrauerei</a>
+          </div>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">15:45 - 16:45 Uhr</div>
+          <div class="event-title">Alte Brücke & Brückenaffe</div>
+          <div class="event-desc">Trink-Stop #4 (ca. 16:15 Uhr) direkt am Neckarufer.</div>
+          <div class="btn-group">
+            <a href="https://maps.google.com/?q=Alte+Bruecke+Heidelberg" target="_blank" rel="noopener noreferrer" class="btn btn-maps">🌉 Alte Brücke</a>
+          </div>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">16:45 - 19:00 Uhr</div>
+          <div class="event-title">Abendessen: Wirtshaus am Markt</div>
+          <div class="event-desc">Feierliches Abendessen mit Augustiner vom Fass & Schnitzeln.</div>
+          <div class="btn-group">
+            <a href="https://maps.google.com/?q=Wirtshaus+am+Markt+Heidelberg" target="_blank" rel="noopener noreferrer" class="btn btn-maps">📍 Wirtshaus am Markt</a>
+          </div>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">19:00 - 20:30 Uhr</div>
+          <div class="event-title">Universitätsplatz & Studentenkuss</div>
+          <div class="event-desc">Trink-Stop #5 (ca. 19:45 Uhr) & Heidelberger Studentenkuss für Bene kaufen.</div>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">20:30 Uhr - Open End</div>
+          <div class="event-title">Geburtstagsnacht & Club halle02</div>
+          <div class="event-desc">Vorglühen in der Altstadt, danach Abfeiern im Kult-Club halle02 (Weststadt).</div>
+          <div class="btn-group">
+            <a href="https://maps.google.com/?q=halle02+Heidelberg" target="_blank" rel="noopener noreferrer" class="btn btn-maps">🎉 halle02</a>
+            <button onclick="document.getElementById('cameraInput').click()" class="btn btn-local">📸 Kamera</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Sonntag -->
+    <div class="day-card">
+      <div class="day-header" onclick="toggleDay(this)">
+        <h2>Sonntag, 11.10. – Kater-Brunch & Heimreise</h2>
+        <span class="toggle-icon">▼</span>
+      </div>
+      <div class="events-list">
+
+        <div class="event-item">
+          <div class="event-time">09:00 - 11:00 Uhr</div>
+          <div class="event-title">Kater-Brunch im Café Extrablatt</div>
+          <div class="event-desc">Ausgiebiges Sonntags-Buffet direkt in der Hauptstraße.</div>
+          <div class="btn-group">
+            <a href="https://maps.google.com/?q=Cafe+Extrablatt+Heidelberg" target="_blank" rel="noopener noreferrer" class="btn btn-maps">☕ Café Extrablatt</a>
+            <button onclick="document.getElementById('cameraInput').click()" class="btn btn-local">📸 Kamera</button>
+          </div>
+        </div>
+
+        <div class="event-item">
+          <div class="event-time">Ab 11:00 Uhr</div>
+          <div class="event-title">Rückreise nach Kempten</div>
+          <div class="event-desc">Gepäck im Hotel B54 abholen und flexibel zum Hauptbahnhof.</div>
+          <div class="btn-group">
+            <a href="https://www.bahn.de/buchung/fahrplan/suche#stm=1&sq=Heidelberg%20Hbf&dq=Kempten(Allg)Hbf" target="_blank" rel="noopener noreferrer" class="btn btn-db">🚆 Zug 12:06 Uhr buchen/prüfen</a>
+            <a href="https://www.bahn.de/buchung/fahrplan/suche#stm=1&sq=Heidelberg%20Hbf&dq=Kempten(Allg)Hbf" target="_blank" rel="noopener noreferrer" class="btn btn-db">🚆 Zug 13:13 Uhr buchen/prüfen</a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Modal / Lightbox -->
+  <div id="imageModal" class="modal" onclick="closeModal()">
+    <span class="modal-close">&times;</span>
+    <img id="modalImg" src="" alt="Vorschau">
+  </div>
+
+  <script>
+    // === KONFIGURATION ===
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwMvYedG4i_VxmeWLGdm-Ols2wloSDjZLPyG-VxmnMVmgrS9dnJeelaiBjGAzdOlfrT/exec";
+
+    function toggleDay(headerElement) {
+      headerElement.parentElement.classList.toggle('open');
+    }
+
+    function openModal(imageSrc) {
+      const modal = document.getElementById('imageModal');
+      document.getElementById('modalImg').src = imageSrc;
+      modal.style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('imageModal').style.display = 'none';
+    }
+
+    // === GALERIE LADEN (fetch, mit Cache-Buster) ===
+    async function loadGallery() {
+      const grid = document.getElementById('photoGrid');
+      grid.innerHTML = '<p style="color: var(--text-muted); grid-column: 1 / -1;">Lade Galerie…</p>';
+
+      try {
+        const res = await fetch(SCRIPT_URL + '?t=' + Date.now(), {
+          method: 'GET',
+          redirect: 'follow'
         });
-      };
-      reader.readAsDataURL(file);
-    });
+        if (!res.ok) throw new Error("HTTP " + res.status);
 
-    event.target.value = '';
-  }
+        const data = await res.json();
+        if (data.result !== "success") throw new Error(data.error || "Unbekannter Fehler");
 
-  window.addEventListener('DOMContentLoaded', loadGallery);
-      </script>
+        const images = data.images || [];
+        if (images.length === 0) {
+          grid.innerHTML = '<p style="color: var(--text-muted); grid-column: 1 / -1;">Noch keine Fotos vorhanden.</p>';
+          return;
+        }
+
+        grid.innerHTML = '';
+        images.forEach(function (img) {
+          const el = document.createElement('img');
+          el.src = img.thumb;
+          el.alt = img.name || "Foto";
+          el.loading = "lazy";
+          el.onclick = function () { openModal(img.url); };
+          grid.appendChild(el);
+        });
+      } catch (err) {
+        console.error("Galerie-Fehler:", err);
+        grid.innerHTML = '<p style="color:#f87171; grid-column: 1 / -1;">Galerie konnte nicht geladen werden: ' + err.message + '</p>';
+      }
+    }
+
+    // === AUTO UPLOAD LOGIK ===
+    function handleAutoUpload(event) {
+      const files = event.target.files;
+      const status = document.getElementById('uploadStatus');
+
+      if (!files || files.length === 0) return;
+
+      const total = files.length;
+      let done = 0;
+      let errors = 0;
+
+      status.innerText = total > 1 ? `⏳ Lade ${total} Fotos hoch…` : "⏳ Foto wird hochgeladen…";
+
+      Array.from(files).forEach(function (file, index) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const base64Data = e.target.result.split(',')[1];
+
+          const payload = {
+            filename: "bene40_" + Date.now() + "_" + index + ".jpg",
+            mimeType: file.type || "image/jpeg",
+            base64: base64Data
+          };
+
+          // Wichtig für Google Apps Script: text/plain als Content-Type verhindert CORS-Sperren
+          fetch(SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+          })
+          .then(res => res.json())
+          .then(data => {
+            done++;
+            if (data.result === "success") {
+              status.innerText = `✅ ${done}/${total} hochgeladen…`;
+  
